@@ -15,36 +15,51 @@ import static spark.Spark.*;
 
 public class Main {
     public static void main(String[] args) {
-        port(8080);
-
-        // API
-        post("/calculadora", (req, res) -> {
-            String hostName = "localhost";
-            int portNumber = 8888;
-            String op = req.queryParams("op");
-            double a = Double.parseDouble(req.queryParams("a"));
-            double b = Double.parseDouble(req.queryParams("b"));
-            double result = 0;
-
-            try (
-                    Socket serverSocket = new Socket(hostName, portNumber);
-                    DataOutputStream out = new DataOutputStream(serverSocket.getOutputStream());
-                    DataInputStream in = new DataInputStream(serverSocket.getInputStream());
-            ) {
-                out.writeUTF(op);
-                out.writeDouble(a);
-                out.writeDouble(b);
-                result = in.readDouble();
-
-            } catch (UnknownHostException e) {
-                System.err.println("Erro no host " + hostName);
-            } catch (IOException e) {
-                System.err.println("Não foi possível obter E/S para a conexão com " + hostName);
-            }
-
+        //Rota para o webservice
+        get("/calculator", (request, response) -> {
             Map<String, Object> model = new HashMap<>();
-            model.put("result", result);
-            return new ModelAndView(model, "calculadora.vm");
+            //Recebe os valores dos campos digitados na tela
+            String operacao = request.queryParams("operacao");
+            String operando1 = request.queryParams("operando1");
+            String operando2 = request.queryParams("operando2");
+            //Verifica se a operação é válida
+            if (operacao == null || operacao.equals("")) {
+                model.put("operacao", "Operação inválida!");
+            }
+            //Verifica se os operandos são válidos
+            if (operando1 == null || operando1.equals("")) {
+                model.put("operando1", "Operando inválido!");
+            }
+            if (operando2 == null || operando2.equals("")) {
+                model.put("operando2", "Operando inválido!");
+            }
+            //Verifica se os operandos são números
+            if (!operando1.matches("[0-9]+") || !operando2.matches("[0-9]+")) {
+                model.put("operando", "Operando inválido!");
+            }
+            //Realiza a conexão com os servidores
+            try {
+                Socket socket1 = new Socket("localhost", 1234);
+                Socket socket2 = new Socket("localhost", 1235);
+                DataOutputStream out1 = new DataOutputStream(socket1.getOutputStream());
+                DataOutputStream out2 = new DataOutputStream(socket2.getOutputStream());
+                //Envia a operação e os operandos para cada servidor
+                out1.writeUTF(operacao + " " + operando1 + " " + operando2);
+                out2.writeUTF(operacao + " " + operando1 + " " + operando2);
+                //Recebe a resposta dos servidores
+                DataInputStream in1 = new DataInputStream(socket1.getInputStream());
+                DataInputStream in2 = new DataInputStream(socket2.getInputStream());
+                model.put("resultado", in1.readUTF() + in2.readUTF());
+                //Fecha as conexões
+                socket1.close();
+                socket2.close();
+            } catch (UnknownHostException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            //Retorna o resultado da operação
+            return new ModelAndView(model, "templates/calculator.vm");
         }, new VelocityTemplateEngine());
     }
 }
